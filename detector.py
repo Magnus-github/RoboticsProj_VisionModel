@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
+from torchvision.models import MobileNet_V2_Weights
 
 
 class BoundingBox(TypedDict):
@@ -42,7 +43,7 @@ class Detector(nn.Module):
         """
         super(Detector, self).__init__()
 
-        self.features = models.mobilenet_v2(pretrained=True).features
+        self.features = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1).features
         # output of mobilenet_v2 will be 1280x15x20 for 480x640 input images
 
         self.head = nn.Conv2d(in_channels=1280, out_channels=5, kernel_size=1)
@@ -55,8 +56,9 @@ class Detector(nn.Module):
         # Where confidence is predicted IOU * probability of object center in this cell
         self.out_cells_x = 20
         self.out_cells_y = 15
-        self.img_height = 480.0
-        self.img_width = 640.0
+        # size of input images
+        self.img_height = 720.0
+        self.img_width = 1280.0
 
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         """Forward pass.

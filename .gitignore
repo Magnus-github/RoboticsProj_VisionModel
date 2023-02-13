@@ -1,6 +1,7 @@
 dd2419_coco
 wandb 
 det_*
+GrumpyData
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

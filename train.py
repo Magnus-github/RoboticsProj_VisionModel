@@ -23,7 +23,7 @@ LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 
 
 def compute_loss(
@@ -68,7 +68,7 @@ def train(device: str = "cpu") -> None:
     Args:
         device: The device to train on.
     """
-    wandb.init(project="detector_baseline")
+    wandb.init(project="GrumpyPerception_OnlyBall")
 
     # Init model
     detector = Detector().to(device)
@@ -76,13 +76,13 @@ def train(device: str = "cpu") -> None:
     wandb.watch(detector)
 
     dataset = CocoDetection(
-        root="./dd2419_coco/training",
-        annFile="./dd2419_coco/annotations/training.json",
+        root="./GrumpyData/training",
+        annFile="./GrumpyData/annotations/training.json",
         transforms=detector.input_transform,
     )
     val_dataset = CocoDetection(
-        root="./dd2419_coco/validation",
-        annFile="./dd2419_coco/annotations/validation.json",
+        root="./GrumpyData/validation",
+        annFile="./GrumpyData/annotations/validation.json",
         transforms=detector.input_transform,
     )
 
@@ -174,7 +174,7 @@ def train(device: str = "cpu") -> None:
                         plt.imshow(
                             out[i, 4, :, :],
                             interpolation="nearest",
-                            extent=(0, 640, 480, 0),
+                            extent=(0, 1280, 720, 0),
                             alpha=0.7,
                         )
 
