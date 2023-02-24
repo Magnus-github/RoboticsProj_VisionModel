@@ -9,7 +9,7 @@ from detector import BoundingBox
 
 
 def add_bounding_boxes(
-    ax: plt.Axes, bbs: List[BoundingBox], category_dict: Dict[int, str] = None
+    ax: plt.Axes, bbs: List[BoundingBox], showClass: bool = False, category_dict: Dict[int, str] = None
 ) -> None:
     """Add bounding boxes to specified axes.
 
@@ -35,11 +35,11 @@ def add_bounding_boxes(
         )
         ax.add_patch(rect)
 
-        if category_dict is not None:
+        if showClass:
             plt.text(
                 bb["x"],
                 bb["y"],
-                category_dict[bb["category"]]["name"],
+                bb["category"],
             )
 
 

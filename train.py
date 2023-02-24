@@ -23,7 +23,8 @@ LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
-BATCH_SIZE = 8
+WEIGHT_CLASS = 1
+BATCH_SIZE = 2
 
 
 def compute_loss(
@@ -59,7 +60,11 @@ def compute_loss(
         prediction_batch[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
         target_batch[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
     )
-    return reg_mse, pos_mse, neg_mse
+    class_err = nn.functional.cross_entropy(
+        prediction_batch[pos_indices[0], 5:13, pos_indices[1], pos_indices[2]],
+        target_batch[pos_indices[0], 5:13, pos_indices[1], pos_indices[2]],
+    )
+    return reg_mse, pos_mse, neg_mse, class_err
 
 
 def train(device: str = "cpu") -> None:
@@ -68,7 +73,7 @@ def train(device: str = "cpu") -> None:
     Args:
         device: The device to train on.
     """
-    wandb.init(project="detector_baseline")
+    wandb.init(project="First full dataset")
 
     # Init model
     detector = Detector().to(device)
@@ -76,13 +81,13 @@ def train(device: str = "cpu") -> None:
     wandb.watch(detector)
 
     dataset = CocoDetection(
-        root="./dd2419_coco/training",
-        annFile="./dd2419_coco/annotations/training.json",
+        root="./data/training",
+        annFile="./data/annotations/training.json",
         transforms=detector.input_transform,
     )
     val_dataset = CocoDetection(
-        root="./dd2419_coco/validation",
-        annFile="./dd2419_coco/annotations/validation.json",
+        root="./data/validation",
+        annFile="./data/annotations/validation.json",
         transforms=detector.input_transform,
     )
 
@@ -97,6 +102,7 @@ def train(device: str = "cpu") -> None:
     wandb.config.weight_pos = WEIGHT_POS
     wandb.config.weight_neg = WEIGHT_NEG
     wandb.config.weight_reg = WEIGHT_REG
+    wandb.config.weight_class = WEIGHT_CLASS
 
     # run name (to easily identify model later)
     time_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -109,11 +115,11 @@ def train(device: str = "cpu") -> None:
     # these will be evaluated in regular intervals
     test_images = []
     show_test_images = False
-    directory = "./test_images"
+    directory = "./data/test_images"
     if not os.path.exists(directory):
         os.makedirs(directory)
     for file_name in sorted(os.listdir(directory)):
-        if file_name.endswith(".jpg"):
+        if file_name.endswith(".jpeg"):
             file_path = os.path.join(directory, file_name)
             test_image = Image.open(file_path)
             torch_image, _ = detector.input_transform(test_image, [])
@@ -135,8 +141,8 @@ def train(device: str = "cpu") -> None:
             # run network
             out = detector(img_batch)
 
-            reg_mse, pos_mse, neg_mse = compute_loss(out, target_batch)
-            loss = WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse
+            reg_mse, pos_mse, neg_mse, class_err = compute_loss(out, target_batch)
+            loss = WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse + WEIGHT_CLASS * class_err
 
             # optimize
             optimizer.zero_grad()
@@ -149,6 +155,7 @@ def train(device: str = "cpu") -> None:
                     "loss pos": pos_mse.item(),
                     "loss neg": neg_mse.item(),
                     "loss reg": reg_mse.item(),
+                    "loss class" : class_err.item()
                 },
                 step=current_iteration,
             )
@@ -174,12 +181,12 @@ def train(device: str = "cpu") -> None:
                         plt.imshow(
                             out[i, 4, :, :],
                             interpolation="nearest",
-                            extent=(0, 640, 480, 0),
+                            extent=(0, 1280, 720, 0),
                             alpha=0.7,
                         )
 
                         # add bounding boxes
-                        utils.add_bounding_boxes(ax, bbs[i])
+                        utils.add_bounding_boxes(ax, bbs[i], showClass=True)
 
                         wandb.log(
                             {"test_img_{i}".format(i=i): figure}, step=current_iteration
@@ -218,17 +225,18 @@ def validate(
     coco_pred = copy.deepcopy(val_dataloader.dataset.coco)
     coco_pred.dataset["annotations"] = []
     with torch.no_grad():
-        count = total_pos_mse = total_reg_mse = total_neg_mse = loss = 0
+        count = total_pos_mse = total_reg_mse = total_neg_mse = total_class_err = loss = 0
         image_id = ann_id = 0
         for val_img_batch, val_target_batch in val_dataloader:
             val_img_batch = val_img_batch.to(device)
             val_target_batch = val_target_batch.to(device)
             val_out = detector(val_img_batch)
-            reg_mse, pos_mse, neg_mse = compute_loss(val_out, val_target_batch)
+            reg_mse, pos_mse, neg_mse, class_err = compute_loss(val_out, val_target_batch)
             total_reg_mse += reg_mse
             total_pos_mse += pos_mse
             total_neg_mse += neg_mse
-            loss += WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse
+            total_class_err += class_err
+            loss += WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse + WEIGHT_CLASS * class_err
             imgs_bbs = detector.decode_output(val_out, topk=100)
             for img_bbs in imgs_bbs:
                 for img_bb in img_bbs:
@@ -242,7 +250,7 @@ def validate(
                                 img_bb["height"],
                             ],
                             "area": img_bb["width"] * img_bb["height"],
-                            "category_id": 1,  # TODO replace with predicted category id
+                            "category_id": img_bb["category"],  
                             "score": img_bb["score"],
                             "image_id": image_id,
                         }
@@ -262,6 +270,7 @@ def validate(
                 "val loss pos": (total_pos_mse / count),
                 "val loss neg": (total_neg_mse / count),
                 "val loss reg": (total_reg_mse / count),
+                "val loss class": (total_class_err/ count),
                 "val AP @IoU 0.5:0.95": coco_eval.stats[0],
                 "val AP @IoU 0.5": coco_eval.stats[1],
                 "val AR @IoU 0.5:0.95": coco_eval.stats[8],

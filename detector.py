@@ -29,7 +29,7 @@ class BoundingBox(TypedDict):
     width: int
     height: int
     score: float
-    category: int
+    category: str
 
 
 class Detector(nn.Module):
@@ -45,7 +45,7 @@ class Detector(nn.Module):
         self.features = models.mobilenet_v2(pretrained=True).features
         # output of mobilenet_v2 will be 1280x15x20 for 480x640 input images
 
-        self.head = nn.Conv2d(in_channels=1280, out_channels=5, kernel_size=1)
+        self.head = nn.Conv2d(in_channels=1280, out_channels=13, kernel_size=1)
         # 1x1 Convolution to reduce channels to out_channels without changing H and W
 
         # 1280x15x20 -> 5x15x20, where each element 5 channel tuple corresponds to
@@ -55,8 +55,9 @@ class Detector(nn.Module):
         # Where confidence is predicted IOU * probability of object center in this cell
         self.out_cells_x = 20
         self.out_cells_y = 15
-        self.img_height = 480.0
-        self.img_width = 640.0
+        # size of input images
+        self.img_height = 720.0
+        self.img_width = 1280.0
 
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -83,13 +84,14 @@ class Detector(nn.Module):
         Args:
             out (torch.tensor):
                 The output tensor encoding the predicted bounding boxes.
-                Shape (N, 5, self.out_cells_y, self.out_cells_y).
-                The 5 channels encode in order:
+                Shape (N, 13, self.out_cells_y, self.out_cells_x).
+                The 13 channels encode in order:
                     - the x offset,
                     - the y offset,
                     - the width,
                     - the height,
-                    - the confidence.
+                    - the confidence,
+                    - channel 6-13: one-hot encoding for classification
             threshold:
                 The confidence threshold above which a bounding box will be accepted.
                 If None, the topk bounding boxes will be returned.
@@ -129,6 +131,29 @@ class Detector(nn.Module):
                     self.img_width / self.out_cells_x * (bb_index[1] + bb_coeffs[0])
                     - width / 2.0
                 ).item()
+                
+                bb_class = ""
+                maxProbIdx = torch.argmax(o[5:13, bb_index[0], bb_index[1]])
+                # print(o[5:13, bb_index[0], bb_index[1]])
+                # print(o[5:13, bb_index[0], bb_index[1]].size)
+                # print(maxProbIdx)
+
+                if maxProbIdx == 0:
+                    bb_class = "Binky"
+                elif maxProbIdx == 1:
+                    bb_class = "Hugo"
+                elif maxProbIdx == 2:
+                    bb_class = "Slush"
+                elif maxProbIdx == 3:
+                    bb_class = "Muddles"
+                elif maxProbIdx == 4:
+                    bb_class = "Kiki"
+                elif maxProbIdx == 5:
+                    bb_class = "Oakie"
+                elif maxProbIdx == 6:
+                    bb_class = "cube"
+                elif maxProbIdx == 7:
+                    bb_class = "ball"
 
                 img_bbs.append(
                     {
@@ -137,6 +162,7 @@ class Detector(nn.Module):
                         "x": x,
                         "y": y,
                         "score": o[4, bb_index[0], bb_index[1]].item(),
+                        "category": bb_class
                     }
                 )
             bbs.append(img_bbs)
@@ -176,12 +202,15 @@ class Detector(nn.Module):
 
         # If there is no bb, the first 4 channels will not influence the loss
         # -> can be any number (will be kept at 0)
-        target = torch.zeros(5, self.out_cells_y, self.out_cells_x)
+
+        # Additional layers: 5-12 for classification
+        target = torch.zeros(13, self.out_cells_y, self.out_cells_x)
         for ann in anns:
             x = ann["bbox"][0]
             y = ann["bbox"][1]
             width = ann["bbox"][2]
             height = ann["bbox"][3]
+            classification = ann["category_id"]
 
             x_center = x + width / 2.0
             y_center = y + height / 2.0
@@ -202,5 +231,24 @@ class Detector(nn.Module):
             target[1, y_ind, x_ind] = y_cell_pos
             target[2, y_ind, x_ind] = rel_width
             target[3, y_ind, x_ind] = rel_height
+
+            # one-hot encoding for classifiaction
+            if classification == 0:
+                target[5, y_ind, x_ind] = 1 # "Binky"
+            elif classification == 1:
+                target[6, y_ind, x_ind] = 1 # "Hugo"
+            elif classification == 2:
+                target[7, y_ind, x_ind] = 1 # "Slush"
+            elif classification == 3:
+                target[8, y_ind, x_ind] = 1 # "Muddles"
+            elif classification == 4:
+                target[9, y_ind, x_ind] =  1 # "Kiki"
+            elif classification == 5:
+                target[10, y_ind, x_ind] = 1 # "Oakie"
+            elif classification == 6:
+                target[11, y_ind, x_ind] = 1 # cube
+            elif classification == 7:
+                target[12, y_ind, x_ind] = 1 # ball
+
 
         return image, target
