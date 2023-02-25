@@ -5,14 +5,14 @@ import json
 
 
 SRC_DIR = [
-    "data/c0/",
-    "data/c1/",
-    "data/c2/",
-    "data/c3/",
-    "data/c4/",
-    "data/c5/",
-    "data/c6/",
-    "data/c7/"
+    "../data_byclass/c0/",
+    "../data_byclass/c1/",
+    "../data_byclass/c2/",
+    "../data_byclass/c3/",
+    "../data_byclass/c4/",
+    "../data_byclass/c5/",
+    "../data_byclass/c6/",
+    "../data_byclass/c7/"
 ]
 
 TRAIN_DIR = "data/training/"
@@ -71,6 +71,8 @@ for dir in SRC_DIR:
         # check if image is in json
         image_index = next((index for (index, d) in enumerate(json_data["images"]) if d["file_name"] == "c" + str(SRC_DIR.index(dir)) + "/" + a), None)
         if image_index != None:
+            # get image_id
+            image_id = json_data["images"][image_index]["id"]
 
             shutil.copy(dir + a, TRAIN_DIR + "image" + str(current_length).zfill(4) + ".jpg")
 
@@ -87,7 +89,7 @@ for dir in SRC_DIR:
             train_images_lst.append(d_img)
 
             # find annotation using image_id and update it
-            index = next((index for (index, d) in enumerate(json_data["annotations"]) if d["image_id"] == image_index+1), None)
+            index = next((index for (index, d) in enumerate(json_data["annotations"]) if d["image_id"] == image_id), None)
             d_ann = json_data["annotations"][index]
             d_ann["id"] = len(train_annotations_lst)+1
             d_ann["image_id"] = d_img["id"]
@@ -101,6 +103,7 @@ for dir in SRC_DIR:
 
         image_index = next((index for (index, d) in enumerate(json_data["images"]) if d["file_name"] == "c" + str(SRC_DIR.index(dir)) + "/" + img), None)
         if image_index != None:
+            image_id = json_data["images"][image_index]["id"]
 
             shutil.copy(dir + img, VAL_DIR + "image" + str(current_length).zfill(4) + ".jpg")
 
@@ -115,7 +118,7 @@ for dir in SRC_DIR:
             val_images_lst.append(d_img)
 
             # find annotation using image_id and update it
-            index = next((index for (index, d) in enumerate(json_data["annotations"]) if d["image_id"] == image_index+1), None)
+            index = next((index for (index, d) in enumerate(json_data["annotations"]) if d["image_id"] == image_id), None)
             d_ann = json_data["annotations"][index]
             d_ann["id"] = len(val_annotations_lst)+1
             d_ann["image_id"] = d_img["id"]
