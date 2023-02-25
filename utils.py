@@ -33,14 +33,16 @@ def add_bounding_boxes(
             edgecolor="r",
             facecolor="none",
         )
-        ax.add_patch(rect)
-
+        
         if showClass:
-            plt.text(
-                bb["x"],
-                bb["y"],
-                bb["category"],
-            )
+            rect.set_label(bb["category"])
+            # plt.text(
+            #     bb["x"],
+            #     bb["y"],
+            #     bb["category"],
+            # )
+        
+        ax.add_patch(rect)
 
 
 def save_model(model: torch.nn.Module, path: str) -> None:
