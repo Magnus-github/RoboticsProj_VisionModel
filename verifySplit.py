@@ -32,6 +32,8 @@ def main():
     i=0
     for train_img, train_target in dataloader:
         figure, ax = plt.subplots(1)
+        test = train_img
+        test1 = train_target
         bbs = detector.decode_output(train_target)
 
         plt.imshow(train_img[0,:,:,:].cpu().permute(1,2,0))
@@ -43,7 +45,25 @@ def main():
         )
         utils.add_bounding_boxes(ax, bbs[0],showClass=True)
         i+=1
-        if i > 10:
+        if i > 50:
+            break
+    i=0
+    for val_img, val_target in val_dataloader:
+        figure, ax = plt.subplots(1)
+        test = val_img
+        test1 = val_target
+        bbs = detector.decode_output(val_target)
+
+        plt.imshow(val_img[0,:,:,:].cpu().permute(1,2,0))
+        plt.imshow(
+            val_target[0,4,:,:],
+            interpolation="nearest",
+            extent=(0,1280,720,0),
+            alpha=0.7,
+        )
+        utils.add_bounding_boxes(ax, bbs[0],showClass=True)
+        i+=1
+        if i > 50:
             break
     
     print("Showing images:")

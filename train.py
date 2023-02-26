@@ -18,13 +18,13 @@ from detector import Detector
 
 NUM_CATEGORIES = 15
 VALIDATION_ITERATION = 100
-NUM_ITERATIONS = 10000
+NUM_ITERATIONS = 50000
 LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
-WEIGHT_CLASS = 1
-BATCH_SIZE = 2
+WEIGHT_CLASS = 2
+BATCH_SIZE = 3
 
 
 def compute_loss(
@@ -37,10 +37,11 @@ def compute_loss(
         target_batch: Batched targets. shape (N,C,H,W).
 
     Returns:
-        Tuple of three separate loss terms:
+        Tuple of four separate loss terms:
             reg_mse: Mean squared error of regression targets.
             pos_mse: Mean squared error of positive confidence channel.
             neg_mse: Mean squared error of negative confidence channel.
+            class_err: Cross entropy loss for classification.
     """
     # positive / negative indices
     # (this could be passed from input_transform to avoid recomputation)
@@ -163,6 +164,9 @@ def train(device: str = "cpu") -> None:
             print(
                 "Iteration: {}, loss: {}".format(current_iteration, loss.item()),
             )
+            print(
+                "classification loss: {}".format(class_err.item()),
+            )
 
             # Validate every N iterations
             if current_iteration % VALIDATION_ITERATION == 0:
@@ -260,7 +264,7 @@ def validate(
             count += len(val_img_batch) / BATCH_SIZE
         coco_pred.createIndex()
         coco_eval = COCOeval(val_dataloader.dataset.coco, coco_pred, iouType="bbox")
-        coco_eval.params.useCats = 0  # TODO replace with 1 when categories are added
+        coco_eval.params.useCats = 1  # TODO replace with 1 when categories are added
         coco_eval.evaluate()
         coco_eval.accumulate()
         coco_eval.summarize()
@@ -292,3 +296,4 @@ if __name__ == "__main__":
     device.add_argument("--gpu", dest="device", action="store_const", const="cuda")
     args = parser.parse_args()
     train(args.device)
+    # train("cuda")
