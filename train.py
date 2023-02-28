@@ -23,7 +23,7 @@ LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 
 
 def compute_loss(
@@ -68,7 +68,7 @@ def train(device: str = "cpu") -> None:
     Args:
         device: The device to train on.
     """
-    wandb.init(project="detector_baseline")
+    wandb.init(project="Object_detection")
 
     # Init model
     detector = Detector().to(device)
@@ -76,13 +76,14 @@ def train(device: str = "cpu") -> None:
     wandb.watch(detector)
 
     dataset = CocoDetection(
-        root="./dd2419_coco/training",
-        annFile="./dd2419_coco/annotations/training.json",
+        root="../data_byclass/images",
+        annFile="./data/annotations/training_data.json",
         transforms=detector.input_transform,
     )
+    #print(len(dataset.ids), dataset.ids)
     val_dataset = CocoDetection(
-        root="./dd2419_coco/validation",
-        annFile="./dd2419_coco/annotations/validation.json",
+        root="../data_byclass/images",
+        annFile="./data/annotations/validation_data.json",
         transforms=detector.input_transform,
     )
 
@@ -107,13 +108,21 @@ def train(device: str = "cpu") -> None:
 
     # load test images
     # these will be evaluated in regular intervals
+    detector.eval()
+    
+    # image, target = dataset.__getitem__(0)
+    # images = torch.zeros((1,image.size[0], image.size[1], image.size[2]))
+    # out, features = detector(images)
+    # print(features.size)
+    # print(out.size)
+    #exit()
     test_images = []
     show_test_images = False
-    directory = "./test_images"
+    directory = "./data/test_images"
     if not os.path.exists(directory):
         os.makedirs(directory)
     for file_name in sorted(os.listdir(directory)):
-        if file_name.endswith(".jpg"):
+        if file_name.endswith(".jpeg"):
             file_path = os.path.join(directory, file_name)
             test_image = Image.open(file_path)
             torch_image, _ = detector.input_transform(test_image, [])
@@ -123,7 +132,21 @@ def train(device: str = "cpu") -> None:
         test_images = torch.stack(test_images)
         test_images = test_images.to(device)
         show_test_images = True
-
+    
+    # import matplotlib.pyplot as plt
+    # import matplotlib.patches as patches
+    # dataset.transforms = None
+    # for i in range(0, 700,1):
+    #     test = dataset
+    #     image, target = dataset.__getitem__(i)
+    #     fig, ax = plt.subplots()
+    #     print(target)
+    #     x,y,w,h = target[0]["bbox"]
+    #     rect = patches.Rectangle((x,y), w,h, linewidth=1, edgecolor="r", facecolor="none")
+    #     ax.imshow(image)
+    #     ax.add_patch(rect)
+    #     plt.show()
+    # exit("forced exit")
     print("Training started...")
 
     current_iteration = 1
@@ -174,7 +197,7 @@ def train(device: str = "cpu") -> None:
                         plt.imshow(
                             out[i, 4, :, :],
                             interpolation="nearest",
-                            extent=(0, 640, 480, 0),
+                            extent=(0, 1280, 720, 0),
                             alpha=0.7,
                         )
 
@@ -283,3 +306,4 @@ if __name__ == "__main__":
     device.add_argument("--gpu", dest="device", action="store_const", const="cuda")
     args = parser.parse_args()
     train(args.device)
+    #train("cpu")
