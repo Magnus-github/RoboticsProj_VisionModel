@@ -23,7 +23,7 @@ LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
-BATCH_SIZE = 2
+BATCH_SIZE = 8
 
 
 def compute_loss(
@@ -68,7 +68,7 @@ def train(device: str = "cpu") -> None:
     Args:
         device: The device to train on.
     """
-    wandb.init(project="Object_detection")
+    wandb.init(project="Object_detection_wAugmentation-1")
 
     # Init model
     detector = Detector().to(device)
@@ -78,13 +78,13 @@ def train(device: str = "cpu") -> None:
     dataset = CocoDetection(
         root="../data_byclass/images",
         annFile="./data/annotations/training_data.json",
-        transforms=detector.input_transform,
+        transforms=detector.input_transform_for_training,
     )
     #print(len(dataset.ids), dataset.ids)
     val_dataset = CocoDetection(
         root="../data_byclass/images",
         annFile="./data/annotations/validation_data.json",
-        transforms=detector.input_transform,
+        transforms=detector.input_transform_for_training,
     )
 
     dataloader = torch.utils.data.DataLoader(
@@ -197,7 +197,7 @@ def train(device: str = "cpu") -> None:
                         plt.imshow(
                             out[i, 4, :, :],
                             interpolation="nearest",
-                            extent=(0, 1280, 720, 0),
+                            extent=(0, 640, 480, 0),
                             alpha=0.7,
                         )
 
