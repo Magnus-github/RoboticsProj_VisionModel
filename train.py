@@ -23,6 +23,7 @@ LEARNING_RATE = 1e-4
 WEIGHT_POS = 1
 WEIGHT_NEG = 1
 WEIGHT_REG = 1
+WEIGHT_CLASS = 1
 BATCH_SIZE = 8
 
 
@@ -59,7 +60,11 @@ def compute_loss(
         prediction_batch[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
         target_batch[neg_indices[0], 4, neg_indices[1], neg_indices[2]],
     )
-    return reg_mse, pos_mse, neg_mse
+    class_err = nn.functional.cross_entropy(
+        prediction_batch[pos_indices[0], 5:13, pos_indices[1], pos_indices[2]],
+        target_batch[pos_indices[0], 5:13, pos_indices[1], pos_indices[2]],
+    )
+    return reg_mse, pos_mse, neg_mse, class_err
 
 
 def train(device: str = "cpu") -> None:
@@ -68,7 +73,7 @@ def train(device: str = "cpu") -> None:
     Args:
         device: The device to train on.
     """
-    wandb.init(project="Object_detection_wAugmentation-1")
+    wandb.init(project="Detection_and_classification")
 
     # Init model
     detector = Detector().to(device)
@@ -98,6 +103,7 @@ def train(device: str = "cpu") -> None:
     wandb.config.weight_pos = WEIGHT_POS
     wandb.config.weight_neg = WEIGHT_NEG
     wandb.config.weight_reg = WEIGHT_REG
+    wandb.config.weight_class = WEIGHT_CLASS
 
     # run name (to easily identify model later)
     time_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -158,8 +164,8 @@ def train(device: str = "cpu") -> None:
             # run network
             out = detector(img_batch)
 
-            reg_mse, pos_mse, neg_mse = compute_loss(out, target_batch)
-            loss = WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse
+            reg_mse, pos_mse, neg_mse, class_err = compute_loss(out, target_batch)
+            loss = WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse + WEIGHT_CLASS * class_err
 
             # optimize
             optimizer.zero_grad()
@@ -172,6 +178,7 @@ def train(device: str = "cpu") -> None:
                     "loss pos": pos_mse.item(),
                     "loss neg": neg_mse.item(),
                     "loss reg": reg_mse.item(),
+                    "loss class" : class_err.item(),
                 },
                 step=current_iteration,
             )
@@ -241,17 +248,18 @@ def validate(
     coco_pred = copy.deepcopy(val_dataloader.dataset.coco)
     coco_pred.dataset["annotations"] = []
     with torch.no_grad():
-        count = total_pos_mse = total_reg_mse = total_neg_mse = loss = 0
+        count = total_pos_mse = total_reg_mse = total_neg_mse = total_class_err = loss = 0
         image_id = ann_id = 0
         for val_img_batch, val_target_batch in val_dataloader:
             val_img_batch = val_img_batch.to(device)
             val_target_batch = val_target_batch.to(device)
             val_out = detector(val_img_batch)
-            reg_mse, pos_mse, neg_mse = compute_loss(val_out, val_target_batch)
+            reg_mse, pos_mse, neg_mse, class_err = compute_loss(val_out, val_target_batch)
             total_reg_mse += reg_mse
             total_pos_mse += pos_mse
             total_neg_mse += neg_mse
-            loss += WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse
+            total_class_err += class_err
+            loss += WEIGHT_POS * pos_mse + WEIGHT_REG * reg_mse + WEIGHT_NEG * neg_mse + WEIGHT_CLASS * class_err
             imgs_bbs = detector.decode_output(val_out, topk=100)
             for img_bbs in imgs_bbs:
                 for img_bb in img_bbs:
@@ -265,7 +273,7 @@ def validate(
                                 img_bb["height"],
                             ],
                             "area": img_bb["width"] * img_bb["height"],
-                            "category_id": 1,  # TODO replace with predicted category id
+                            "category_id": img_bb["category"],
                             "score": img_bb["score"],
                             "image_id": image_id,
                         }
@@ -285,6 +293,7 @@ def validate(
                 "val loss pos": (total_pos_mse / count),
                 "val loss neg": (total_neg_mse / count),
                 "val loss reg": (total_reg_mse / count),
+                "val loss class": (total_class_err/ count),
                 "val AP @IoU 0.5:0.95": coco_eval.stats[0],
                 "val AP @IoU 0.5": coco_eval.stats[1],
                 "val AR @IoU 0.5:0.95": coco_eval.stats[8],

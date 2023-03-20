@@ -34,13 +34,19 @@ def add_bounding_boxes(
             facecolor="none",
         )
         ax.add_patch(rect)
-
-        if category_dict is not None:
+        if bb["category"] != 1:
             plt.text(
                 bb["x"],
                 bb["y"],
-                category_dict[bb["category"]]["name"],
+                bb["category"],
             )
+
+        # if category_dict is not None:
+        #     plt.text(
+        #         bb["x"],
+        #         bb["y"],
+        #         category_dict[bb["category"]]["name"],
+        #     )
 
 
 def save_model(model: torch.nn.Module, path: str) -> None:

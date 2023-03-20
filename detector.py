@@ -49,7 +49,7 @@ class Detector(nn.Module):
         # output of mobilenet_v2 will be 1280x23x40 for 720x1280 input images
         # output of mobilenet_v2 will be 1280x15x20 for 480x640 input images 
 
-        self.head = nn.Conv2d(in_channels=1280, out_channels=5, kernel_size=1)
+        self.head = nn.Conv2d(in_channels=1280, out_channels=13, kernel_size=1)
         # 1x1 Convolution to reduce channels to out_channels without changing H and W
 
         # 1280x15x20 -> 5x15x20, where each element 5 channel tuple corresponds to
@@ -75,7 +75,7 @@ class Detector(nn.Module):
             Shape (N, 5, self.out_cells_y, self.out_cells_y).
         """
         features = self.features(inp)
-        out = self.head(features)  # Linear (i.e., no) activation
+        out = self.head(features)  # Linear (i.e. no activation)
 
         return out
 
@@ -134,6 +134,29 @@ class Detector(nn.Module):
                     - width / 2.0
                 ).item()
 
+                bb_class = ""
+                maxProbIdx = torch.argmax(o[5:13, bb_index[0], bb_index[1]])
+                # print(o[5:13, bb_index[0], bb_index[1]])
+                # print(o[5:13, bb_index[0], bb_index[1]].size)
+                # print(maxProbIdx)
+
+                if maxProbIdx == 0:
+                    bb_class = "Binky"
+                elif maxProbIdx == 1:
+                    bb_class = "Hugo"
+                elif maxProbIdx == 2:
+                    bb_class = "Slush"
+                elif maxProbIdx == 3:
+                    bb_class = "Muddles"
+                elif maxProbIdx == 4:
+                    bb_class = "Kiki"
+                elif maxProbIdx == 5:
+                    bb_class = "Oakie"
+                elif maxProbIdx == 6:
+                    bb_class = "cube"
+                elif maxProbIdx == 7:
+                    bb_class = "ball"
+
                 img_bbs.append(
                     {
                         "width": width,
@@ -141,8 +164,10 @@ class Detector(nn.Module):
                         "x": x,
                         "y": y,
                         "score": o[4, bb_index[0], bb_index[1]].item(),
+                        "category": bb_class
                     }
                 )
+                
             bbs.append(img_bbs)
 
         return bbs
@@ -166,7 +191,7 @@ class Detector(nn.Module):
                     The network target encoding the bounding box.
                     Shape (5, self.out_cells_y, self.out_cells_x).
         """
-      bbs = [[ann["bbox"][0], ann["bbox"][1], ann["bbox"][2], ann["bbox"][3], "idk"] for ann in anns]
+      bbs = [[ann["bbox"][0], ann["bbox"][1], ann["bbox"][2], ann["bbox"][3], ann["category_id"]] for ann in anns]
       transform = A.Compose([
           A.Resize(height=480, width=640),
             ], bbox_params=A.BboxParams(format='coco', min_area=1024, min_visibility=0.1))
@@ -178,12 +203,13 @@ class Detector(nn.Module):
           mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
           )(image)
      
-      target = torch.zeros(5, self.out_cells_y, self.out_cells_x)
+      target = torch.zeros(13, self.out_cells_y, self.out_cells_x)
       for bbx in bbs:
         x = bbx[0]
         y = bbx[1]
         width = bbx[2]
         height = bbx[3]
+        label = bbx[4]
         x_center = x + width / 2.0
         y_center = y + height / 2.0
         x_center_rel = x_center / self.img_width * self.out_cells_x
@@ -204,11 +230,29 @@ class Detector(nn.Module):
         target[2, y_ind, x_ind] = rel_width
         target[3, y_ind, x_ind] = rel_height
 
+        # one-hot encoding for classifiaction
+        if label == 0:
+            target[5, y_ind, x_ind] = 1 # "Binky"
+        elif label == 1:
+            target[6, y_ind, x_ind] = 1 # "Hugo"
+        elif label == 2:
+            target[7, y_ind, x_ind] = 1 # "Slush"
+        elif label == 3:
+            target[8, y_ind, x_ind] = 1 # "Muddles"
+        elif label == 4:
+            target[9, y_ind, x_ind] =  1 # "Kiki"
+        elif label == 5:
+            target[10, y_ind, x_ind] = 1 # "Oakie"
+        elif label == 6:
+            target[11, y_ind, x_ind] = 1 # cube
+        elif label == 7:
+            target[12, y_ind, x_ind] = 1 # ball
+
       return image, target
     
 
     def input_transform_for_training(self, image: Image, anns: List) -> Tuple[torch.Tensor]:
-      bbs = [[ann["bbox"][0], ann["bbox"][1], ann["bbox"][2], ann["bbox"][3], "idk"] for ann in anns]
+      bbs = [[ann["bbox"][0], ann["bbox"][1], ann["bbox"][2], ann["bbox"][3], ann["category_id"]] for ann in anns]
       transform = A.Compose([
           A.Resize(height=480, width=640),
           A.HorizontalFlip(p=0.5),
@@ -240,12 +284,13 @@ class Detector(nn.Module):
         
         
 
-      target = torch.zeros(5, self.out_cells_y, self.out_cells_x)
+      target = torch.zeros(13, self.out_cells_y, self.out_cells_x)
       for bbx in bbs:
         x = bbx[0]
         y = bbx[1]
         width = bbx[2]
         height = bbx[3]
+        label = bbx[4]
         x_center = x + width / 2.0
         y_center = y + height / 2.0
         x_center_rel = x_center / self.img_width * self.out_cells_x
@@ -263,5 +308,23 @@ class Detector(nn.Module):
         target[1, y_ind, x_ind] = y_cell_pos
         target[2, y_ind, x_ind] = rel_width
         target[3, y_ind, x_ind] = rel_height
+
+        # one-hot encoding for classifiaction
+        if label == 0:
+            target[5, y_ind, x_ind] = 1 # "Binky"
+        elif label == 1:
+            target[6, y_ind, x_ind] = 1 # "Hugo"
+        elif label == 2:
+            target[7, y_ind, x_ind] = 1 # "Slush"
+        elif label == 3:
+            target[8, y_ind, x_ind] = 1 # "Muddles"
+        elif label == 4:
+            target[9, y_ind, x_ind] =  1 # "Kiki"
+        elif label == 5:
+            target[10, y_ind, x_ind] = 1 # "Oakie"
+        elif label == 6:
+            target[11, y_ind, x_ind] = 1 # cube
+        elif label == 7:
+            target[12, y_ind, x_ind] = 1 # ball
 
       return image, target
